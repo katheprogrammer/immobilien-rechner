@@ -3,58 +3,74 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Immobilienkauf & Vermietung – Vollrechner</title>
+  <title>Immobilien Rechner</title>
   <style>
-    body { font-family: Arial, sans-serif; background:#f5f5f5; padding:20px; }
-    .container { max-width:1000px; background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.1); }
-    h1,h2 { margin-top:0; }
-    label { display:block; margin-top:10px; font-weight:bold; }
-    input { width:100%; padding:6px; margin-top:4px; }
-    input[readonly] { background:#eee; }
-    button { margin-top:10px; padding:8px; width:100%; }
-    table { width:100%; border-collapse:collapse; margin-top:20px; }
-    th, td { border:1px solid #ccc; padding:6px; text-align:right; }
-    th { background:#eee; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background:#eef1f5; margin:0; }
+    .container { max-width:900px; margin:20px auto; background:#fff; padding:20px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08); }
+    h1 { text-align:center; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    label { font-size:0.85rem; color:#555; }
+    input, select { width:100%; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    input[readonly] { background:#f3f3f3; }
+    button { padding:10px; border:none; border-radius:10px; cursor:pointer; }
+    .btn { background:#007AFF; color:#fff; }
+    .btn-secondary { background:#ddd; }
     .positive { color:green; font-weight:bold; }
     .negative { color:red; font-weight:bold; }
+    table { width:100%; margin-top:20px; border-collapse:collapse; }
+    th, td { padding:8px; border-bottom:1px solid #eee; text-align:right; }
+    th { text-align:right; }
   </style>
 </head>
 <body>
 <div class="container">
-<h1>Immobilienkauf & Vermietung – Vollrechner</h1>
+<h1>Immobilien Rechner</h1>
 
-<h2>Eingaben</h2>
-<label>Kaufpreis (€)</label><input id="kaufpreis" type="number">
-<label>Kaufnebenkosten (10 %)</label><input id="nebenkosten" readonly>
-<label>Eigenmittel (€)</label><input id="eigenmittel" type="number">
-<label>Zinssatz (% p.a.)</label><input id="zinssatz" type="number" step="0.01">
-<label>Laufzeit (Jahre)</label><input id="laufzeit" type="number">
-<label>Betriebskosten monatlich (€)</label><input id="betriebskosten" type="number">
-<label>Mieteinnahmen monatlich (€)</label><input id="miete" type="number">
+<div class="grid">
+  <div>
+    <label>Kaufpreis</label><input id="kaufpreis" type="number">
+  </div>
+  <div>
+    <label>Nebenkosten (10%)</label><input id="nebenkosten" readonly>
+  </div>
+  <div>
+    <label>Eigenmittel</label><input id="eigenmittel" type="number">
+  </div>
+  <div>
+    <label>Zinssatz %</label><input id="zinssatz" type="number">
+  </div>
+  <div>
+    <label>Laufzeit (Jahre)</label><input id="laufzeit" type="number">
+  </div>
+  <div>
+    <label>Betriebskosten</label><input id="betriebskosten" type="number">
+  </div>
+  <div>
+    <label>Miete</label><input id="miete" type="number">
+  </div>
+</div>
 
-<button onclick="saveData()">💾 Eingaben speichern</button>
-<button onclick="loadData()">📂 Eingaben laden</button>
+<br>
+<input id="projektname" placeholder="Projektname eingeben">
+<button class="btn" onclick="saveData()">💾 Speichern</button>
+<select id="projektliste"></select>
+<button class="btn-secondary" onclick="loadData()">📂 Laden</button>
 
 <h2>Ergebnisse</h2>
-<label>Monatliche Rate (€)</label><input id="rate" readonly>
-<label>Monatliches Saldo (Liquidität) (€)</label><input id="saldo" readonly>
-<label>Restschuld (€)</label><input id="restschuld" readonly>
-<label>Gesamtzinskosten (€)</label><input id="zinskosten" readonly>
-<label>Eigenkapitalrendite inkl. Tilgung (% p.a.)</label><input id="ekr" readonly>
+<div class="grid">
+  <div><label>Rate</label><input id="rate" readonly></div>
+  <div><label>Saldo</label><input id="saldo" readonly></div>
+  <div><label>Zinskosten</label><input id="zinskosten" readonly></div>
+  <div><label>EK Rendite %</label><input id="ekr" readonly></div>
+</div>
 <div id="saldoText"></div>
 
-<h2>Jährliche Aufteilung Rate (Zins & Tilgung)</h2>
+<h2>Jahresübersicht</h2>
 <table>
-  <thead>
-    <tr>
-      <th>Jahr</th>
-      <th>Jahresrate (€)</th>
-      <th>Zinsen (€)</th>
-      <th>Tilgung (€)</th>
-      <th>Restschuld (€)</th>
-    </tr>
-  </thead>
-  <tbody id="jahresplan"></tbody>
+<thead>
+<tr><th>Jahr</th><th>Rate</th><th>Zinsen</th><th>Tilgung</th></tr>
+</thead>
+<tbody id="jahresplan"></tbody>
 </table>
 </div>
 
@@ -64,101 +80,80 @@ const inputs = document.querySelectorAll('input');
 function calc(){
   const kp = +kaufpreis.value;
   const em = +eigenmittel.value;
-  const zs = +zinssatz.value / 100 / 12;
-  const lj = +laufzeit.value * 12;
+  const zs = +zinssatz.value/100/12;
+  const lj = +laufzeit.value*12;
   const bk = +betriebskosten.value;
   const mi = +miete.value;
 
   if(!kp) return;
-  nebenkosten.value = (kp * 0.1).toFixed(2);
+  nebenkosten.value = (kp*0.1).toFixed(2);
+  if(!em||!zs||!lj) return;
 
-  if(!em || !zs || !lj) return;
-  const kredit = kp * 1.1 - em;
+  const kredit = kp*1.1 - em;
+  const rateVal = kredit*(zs*Math.pow(1+zs,lj))/(Math.pow(1+zs,lj)-1);
+  rate.value = rateVal.toFixed(2);
 
-  const rate = kredit * (zs * Math.pow(1 + zs, lj)) / (Math.pow(1 + zs, lj) - 1);
-  rate.value = rate.toFixed(2);
+  let rest=kredit, zinsSum=0, zinsY=0, tilgY=0, jahr=1;
+  jahresplan.innerHTML="";
 
-  let rest = kredit;
-  let zinsSumme = 0;
-  let zinsJahr1 = 0;
-  let tilgJahr1 = 0;
-  let jahresZins = 0;
-  let jahresTilg = 0;
-  let jahr = 1;
+  for(let m=1;m<=lj;m++){
+    let z=rest*zs;
+    let t=rateVal-z;
+    rest-=t;
+    zinsSum+=z;
+    zinsY+=z;
+    tilgY+=t;
 
-  jahresplan.innerHTML = "";
-
-  for(let m = 1; m <= lj; m++){
-    let zins = rest * zs;
-    let tilg = rate - zins;
-
-    rest -= tilg;
-    zinsSumme += zins;
-    jahresZins += zins;
-    jahresTilg += tilg;
-
-    if(m <= 12){
-      zinsJahr1 += zins;
-      tilgJahr1 += tilg;
+    if(m%12===0||rest<=0){
+      jahresplan.innerHTML+=`<tr><td>${jahr}</td><td>${(rateVal*12).toFixed(0)}</td><td>${zinsY.toFixed(0)}</td><td>${tilgY.toFixed(0)}</td></tr>`;
+      jahr++; zinsY=0; tilgY=0;
     }
-
-    if(m % 12 === 0 || rest <= 0){
-      if(rest < 0) rest = 0;
-
-      jahresplan.innerHTML += `
-        <tr>
-          <td>${jahr}</td>
-          <td>${(rate*12).toFixed(2)}</td>
-          <td>${jahresZins.toFixed(2)}</td>
-          <td>${jahresTilg.toFixed(2)}</td>
-          <td>${rest.toFixed(2)}</td>
-        </tr>`;
-
-      jahr++;
-      jahresZins = 0;
-      jahresTilg = 0;
-    }
-
-    if(rest === 0) break;
+    if(rest<=0) break;
   }
 
-  restschuld.value = rest.toFixed(2);
-  zinskosten.value = zinsSumme.toFixed(2);
+  zinskosten.value = zinsSum.toFixed(0);
 
-  if(mi && bk){
-    const liquidCF = mi - bk - rate;
-    saldo.value = liquidCF.toFixed(2);
-    saldoText.textContent = liquidCF >= 0
-      ? `Positiver Liquiditäts-Cashflow: ${liquidCF.toFixed(2)} € / Monat`
-      : `Negativer Liquiditäts-Cashflow: ${liquidCF.toFixed(2)} € / Monat`;
-    saldoText.className = liquidCF >= 0 ? 'positive' : 'negative';
+  if(mi&&bk){
+    const cf=mi-bk-rateVal;
+    saldo.value=cf.toFixed(2);
+    saldoText.textContent = cf>=0?`+${cf.toFixed(2)} €`:`${cf.toFixed(2)} €`;
+    saldoText.className = cf>=0?'positive':'negative';
   }
 
-  const eingesetztesEK = em + kp * 0.1;
-  if(eingesetztesEK > 0 && mi && bk){
-    const cashflowOhneTilg = (mi * 12) - (bk * 12) - zinsJahr1;
-    const gesamtErtrag = cashflowOhneTilg + tilgJahr1;
-    ekr.value = ((gesamtErtrag / eingesetztesEK) * 100).toFixed(2);
+  const ek = em+kp*0.1;
+  if(ek>0 && mi && bk){
+    const cash=(mi*12)-(bk*12)-zinsY;
+    const ertrag=cash+tilgY;
+    ekr.value=((ertrag/ek)*100).toFixed(2);
   }
 }
 
-// 💾 Speichern
 function saveData(){
-  const data = {};
-  inputs.forEach(i => data[i.id] = i.value);
-  localStorage.setItem('immoRechner', JSON.stringify(data));
-  alert('Gespeichert!');
+  const name = projektname.value;
+  if(!name) return alert('Name eingeben');
+  let all = JSON.parse(localStorage.getItem('projekte')||"{}");
+  const data={}; inputs.forEach(i=>data[i.id]=i.value);
+  all[name]=data;
+  localStorage.setItem('projekte',JSON.stringify(all));
+  updateList();
 }
 
-// 📂 Laden
 function loadData(){
-  const data = JSON.parse(localStorage.getItem('immoRechner'));
-  if(!data) return alert('Keine Daten gefunden');
-  inputs.forEach(i => i.value = data[i.id] || '');
+  let all = JSON.parse(localStorage.getItem('projekte')||"{}");
+  const name = projektliste.value;
+  const data = all[name];
+  if(!data) return;
+  inputs.forEach(i=>i.value=data[i.id]||"");
   calc();
 }
 
-inputs.forEach(i => i.addEventListener('input', calc));
+function updateList(){
+  let all = JSON.parse(localStorage.getItem('projekte')||"{}");
+  projektliste.innerHTML = Object.keys(all).map(k=>`<option>${k}</option>`).join('');
+}
+
+inputs.forEach(i=>i.addEventListener('input',calc));
+updateList();
 </script>
 </body>
 </html>
