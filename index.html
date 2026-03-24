@@ -4,42 +4,28 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Immobilien Rechner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg,#eef2f7,#e3e9f2); margin:0; }
 .container { max-width:900px; margin:20px auto; padding:16px; }
 .card { background:#fff; padding:20px; border-radius:20px; box-shadow:0 10px 30px rgba(0,0,0,0.08); margin-bottom:16px; }
-h1 { text-align:center; margin-bottom:10px; }
+h1 { text-align:center; }
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 @media(max-width:700px){ .grid{ grid-template-columns:1fr; } }
 .field { display:flex; flex-direction:column; }
 label { font-size:0.8rem; color:#777; margin-bottom:4px; }
-input, select {
-  width:100%; padding:12px; border-radius:12px;
-  border:1px solid #ddd; font-size:1rem;
-  transition:0.2s;
-}
-input:focus { outline:none; border-color:#007AFF; box-shadow:0 0 0 2px rgba(0,122,255,0.15); }
+input, select { width:100%; padding:12px; border-radius:12px; border:1px solid #ddd; }
 input[readonly] { background:#f4f6f8; }
-button {
-  padding:12px; border:none; border-radius:12px;
-  cursor:pointer; font-weight:600;
-}
-.btn { background:#007AFF; color:#fff; }
-.btn-secondary { background:#f1f1f1; }
-.actions { display:flex; gap:10px; margin-top:10px; }
-.actions button { flex:1; }
+button { padding:12px; border:none; border-radius:12px; cursor:pointer; font-weight:600; }
 .result-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .positive { color:#1aa36f; font-weight:bold; }
 .negative { color:#e5484d; font-weight:bold; }
-.table-card { overflow-x:auto; }
-table { width:100%; border-collapse:collapse; margin-top:10px; }
-th, td { padding:10px; text-align:right; border-bottom:1px solid #eee; }
-th { color:#666; font-size:0.8rem; }
+.score { font-size:1.2rem; font-weight:bold; }
+canvas { margin-top:20px; }
 </style>
 </head>
 <body>
 <div class="container">
-
 <h1>🏠 Immobilien Rechner</h1>
 
 <div class="card">
@@ -47,22 +33,12 @@ th { color:#666; font-size:0.8rem; }
 <div class="grid">
   <div class="field"><label>Kaufpreis</label><input id="kaufpreis" type="number"></div>
   <div class="field"><label>Nebenkosten (10%)</label><input id="nebenkosten" readonly></div>
-  <div class="field"><label>Eigenmittel</label><input id="eigenmittel" type="number"></div>
+  <div class="field"><label id="ekLabel">Eigenmittel</label><input id="eigenmittel" type="number"></div>
   <div class="field"><label>Zinssatz %</label><input id="zinssatz" type="number"></div>
   <div class="field"><label>Laufzeit (Jahre)</label><input id="laufzeit" type="number"></div>
   <div class="field"><label>Betriebskosten</label><input id="betriebskosten" type="number"></div>
   <div class="field"><label>Miete</label><input id="miete" type="number"></div>
 </div>
-</div>
-
-<div class="card">
-<h3>Projekte</h3>
-<input id="projektname" placeholder="Projektname...">
-<div class="actions">
-  <button class="btn" onclick="saveData()">Speichern</button>
-  <button class="btn-secondary" onclick="loadData()">Laden</button>
-</div>
-<select id="projektliste"></select>
 </div>
 
 <div class="card">
@@ -74,22 +50,22 @@ th { color:#666; font-size:0.8rem; }
   <div class="field"><label>EK Rendite %</label><input id="ekr" readonly></div>
 </div>
 <div id="saldoText"></div>
+<div id="breakeven"></div>
+<div id="ampel" class="score"></div>
+<div id="score" class="score"></div>
 </div>
 
-<div class="card table-card">
-<h3>Jahresübersicht</h3>
-<table>
-<thead>
-<tr><th>Jahr</th><th>Rate</th><th>Zinsen</th><th>Tilgung</th></tr>
-</thead>
-<tbody id="jahresplan"></tbody>
-</table>
+<div class="card">
+<h3>Visualisierung</h3>
+<canvas id="zinsTilgungChart"></canvas>
+<canvas id="ekChart"></canvas>
 </div>
 
 </div>
 
 <script>
 const inputs = document.querySelectorAll('input');
+let chart1, chart2;
 
 function calc(){
   const kp = +kaufpreis.value;
@@ -99,75 +75,99 @@ function calc(){
   const bk = +betriebskosten.value;
   const mi = +miete.value;
 
-  if(!kp) return;
-  nebenkosten.value = (kp*0.1).toFixed(0);
+  if(kp){
+    nebenkosten.value = (kp*0.1).toFixed(0);
+    ekLabel.textContent = `Eigenmittel (20%: ${(kp*0.2).toFixed(0)} €)`;
+  }
+
   if(!em||!zs||!lj) return;
 
   const kredit = kp*1.1 - em;
   const rateVal = kredit*(zs*Math.pow(1+zs,lj))/(Math.pow(1+zs,lj)-1);
   rate.value = rateVal.toFixed(0);
 
-  let rest=kredit, zinsSum=0, zinsY=0, tilgY=0, jahr=1;
-  jahresplan.innerHTML="";
+  let rest=kredit, zinsSum=0, jahr=1;
+  let labels=[], zinsenArr=[], tilgungArr=[], ekrArr=[];
+
+  let zinsJahr=0, tilgJahr=0;
 
   for(let m=1;m<=lj;m++){
     let z=rest*zs;
     let t=rateVal-z;
     rest-=t;
     zinsSum+=z;
-    zinsY+=z;
-    tilgY+=t;
+
+    zinsJahr += z;
+    tilgJahr += t;
 
     if(m%12===0||rest<=0){
-      jahresplan.innerHTML+=`<tr><td>${jahr}</td><td>${(rateVal*12).toFixed(0)}</td><td>${zinsY.toFixed(0)}</td><td>${tilgY.toFixed(0)}</td></tr>`;
-      jahr++; zinsY=0; tilgY=0;
+      labels.push("J"+jahr);
+      zinsenArr.push(zinsJahr);
+      tilgungArr.push(tilgJahr);
+
+      const ek = em+kp*0.1;
+      const cash=(mi*12)-(bk*12)-zinsJahr;
+      const ertrag=cash+tilgJahr;
+      ekrArr.push((ertrag/ek)*100);
+
+      jahr++;
+      zinsJahr=0;
+      tilgJahr=0;
     }
     if(rest<=0) break;
   }
 
   zinskosten.value = zinsSum.toFixed(0);
 
-  if(mi&&bk){
-    const cf=mi-bk-rateVal;
-    saldo.value=cf.toFixed(0);
-    saldoText.textContent = cf>=0?`+${cf.toFixed(0)} € / Monat`:`${cf.toFixed(0)} € / Monat`;
-    saldoText.className = cf>=0?'positive':'negative';
+  const cf=mi-bk-rateVal;
+  saldo.value=cf.toFixed(0);
+
+  // Saldo Farbe
+  saldo.className = cf >= 0 ? 'positive' : 'negative';
+
+  // Break-even
+  breakeven.textContent = cf>=0 ? "Break-even erreicht" : "Kein Break-even";
+
+  // Ampel
+  if(cf>0) ampel.textContent="🟢 Guter Deal";
+  else if(cf>-200) ampel.textContent="🟡 Grenzwertig";
+  else ampel.textContent="🔴 Schlecht";
+
+  // SCORE (neue Logik)
+  const ek = em + kp*0.1;
+  let faktor = ek > 0 ? Math.abs(cf*12) / ek : 0; // Verhältnis zum Investment
+
+  let scoreVal = 75; // Basis bei Break-even
+
+  if(cf > 0){
+    scoreVal += faktor * 200;
+  } else {
+    scoreVal -= faktor * 200;
   }
 
-  const ek = em+kp*0.1;
-  if(ek>0 && mi && bk){
-    const cash=(mi*12)-(bk*12)-zinsY;
-    const ertrag=cash+tilgY;
-    ekr.value=((ertrag/ek)*100).toFixed(2);
-  }
+  scoreVal = Math.max(0, Math.min(100, scoreVal));
+
+  score.textContent = "Score: "+Math.round(scoreVal)+"/100";
+
+  renderCharts(labels,zinsenArr,tilgungArr,ekrArr);
 }
 
-function saveData(){
-  const name = projektname.value;
-  if(!name) return alert('Name eingeben');
-  let all = JSON.parse(localStorage.getItem('projekte')||"{}");
-  const data={}; inputs.forEach(i=>data[i.id]=i.value);
-  all[name]=data;
-  localStorage.setItem('projekte',JSON.stringify(all));
-  updateList();
-}
+function renderCharts(labels,zinsen,tilgung,ekr){
+  if(chart1) chart1.destroy();
+  if(chart2) chart2.destroy();
 
-function loadData(){
-  let all = JSON.parse(localStorage.getItem('projekte')||"{}");
-  const name = projektliste.value;
-  const data = all[name];
-  if(!data) return;
-  inputs.forEach(i=>i.value=data[i.id]||"");
-  calc();
-}
+  chart1 = new Chart(document.getElementById('zinsTilgungChart'),{
+    type:'bar',
+    data:{labels,datasets:[{label:'Zinsen',data:zinsen},{label:'Tilgung',data:tilgung}]}
+  });
 
-function updateList(){
-  let all = JSON.parse(localStorage.getItem('projekte')||"{}");
-  projektliste.innerHTML = Object.keys(all).map(k=>`<option>${k}</option>`).join('');
+  chart2 = new Chart(document.getElementById('ekChart'),{
+    type:'line',
+    data:{labels,datasets:[{label:'EK Rendite %',data:ekr}]}
+  });
 }
 
 inputs.forEach(i=>i.addEventListener('input',calc));
-updateList();
 </script>
 </body>
 </html>
