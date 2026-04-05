@@ -14,9 +14,8 @@ h1 { text-align:center; }
 @media(max-width:700px){ .grid{ grid-template-columns:1fr; } }
 .field { display:flex; flex-direction:column; }
 label { font-size:0.8rem; color:#777; margin-bottom:4px; }
-input, select { width:100%; padding:12px; border-radius:12px; border:1px solid #ddd; }
+input { width:100%; padding:12px; border-radius:12px; border:1px solid #ddd; }
 input[readonly] { background:#f4f6f8; }
-button { padding:12px; border:none; border-radius:12px; cursor:pointer; font-weight:600; }
 .result-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .positive { color:#1aa36f; font-weight:bold; }
 .negative { color:#e5484d; font-weight:bold; }
@@ -47,10 +46,9 @@ canvas { margin-top:20px; }
   <div class="field"><label>Rate</label><input id="rate" readonly></div>
   <div class="field"><label>Saldo</label><input id="saldo" readonly></div>
   <div class="field"><label>Zinskosten</label><input id="zinskosten" readonly></div>
-  <div class="field"><label>EK Rendite %</label><input id="ekr" readonly></div>
+  <div class="field"><label>Ø EK Rendite %</label><input id="ekr" readonly></div>
+  <div class="field"><label>Max Kaufpreis (Break-even)</label><input id="maxkp" readonly></div>
 </div>
-<div id="saldoText"></div>
-<div id="breakeven"></div>
 <div id="ampel" class="score"></div>
 <div id="score" class="score"></div>
 </div>
@@ -121,33 +119,35 @@ function calc(){
 
   const cf=mi-bk-rateVal;
   saldo.value=cf.toFixed(0);
-
-  // Saldo Farbe
   saldo.className = cf >= 0 ? 'positive' : 'negative';
 
-  // Break-even
-  breakeven.textContent = cf>=0 ? "Break-even erreicht" : "Kein Break-even";
+  // Durchschnitt EK Rendite
+  const avg = ekrArr.reduce((a,b)=>a+b,0)/ekrArr.length;
+  ekr.value = avg.toFixed(2);
 
   // Ampel
   if(cf>0) ampel.textContent="🟢 Guter Deal";
   else if(cf>-200) ampel.textContent="🟡 Grenzwertig";
   else ampel.textContent="🔴 Schlecht";
 
-  // SCORE (neue Logik)
+  // Score
   const ek = em + kp*0.1;
-  let faktor = ek > 0 ? Math.abs(cf*12) / ek : 0; // Verhältnis zum Investment
-
-  let scoreVal = 75; // Basis bei Break-even
-
-  if(cf > 0){
-    scoreVal += faktor * 200;
-  } else {
-    scoreVal -= faktor * 200;
-  }
-
+  let faktor = ek > 0 ? Math.abs(cf*12) / ek : 0;
+  let scoreVal = 75;
+  scoreVal += cf>0 ? faktor*200 : -faktor*200;
   scoreVal = Math.max(0, Math.min(100, scoreVal));
-
   score.textContent = "Score: "+Math.round(scoreVal)+"/100";
+
+  // Kaufpreis Optimierung (Break-even = Saldo 0)
+  let testKp = kp;
+  for(let i=0;i<50;i++){
+    let kreditTest = testKp*1.1 - em;
+    let rateTest = kreditTest*(zs*Math.pow(1+zs,lj))/(Math.pow(1+zs,lj)-1);
+    let cfTest = mi - bk - rateTest;
+    if(cfTest > 0) testKp += 1000;
+    else testKp -= 1000;
+  }
+  maxkp.value = testKp.toFixed(0);
 
   renderCharts(labels,zinsenArr,tilgungArr,ekrArr);
 }
